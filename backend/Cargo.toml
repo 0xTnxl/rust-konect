@@ -1,0 +1,27 @@
+[package]
+name = "rust-konect-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+axum = { workspace = true }
+axum-extra = { version = "0.9", features = ["multipart"] }
+sqlx = { workspace = true }
+xmpp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+bcrypt = { workspace = true }
+jsonwebtoken = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+mime_guess = { workspace = true }
+futures-util = "0.3"
+dotenv = "0.15"

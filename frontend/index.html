@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Konect - Chat Application</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Login/Register Modal -->
+        <div id="auth-modal" class="modal">
+            <div class="modal-content">
+                <h2 id="auth-title">Login</h2>
+                <form id="auth-form">
+                    <div id="username-field" class="form-group" style="display: none;">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email:</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit" id="auth-submit">Login</button>
+                    <p id="auth-toggle">
+                        Don't have an account? <a href="#" id="toggle-auth">Register</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Main Chat Interface -->
+        <div id="chat-container" style="display: none;">
+            <header class="chat-header">
+                <h1>Rust Konect</h1>
+                <div class="user-info">
+                    <span id="current-user"></span>
+                    <button id="logout-btn">Logout</button>
+                </div>
+            </header>
+
+            <div class="chat-main">
+                <!-- Sidebar with rooms -->
+                <aside class="sidebar">
+                    <div class="rooms-header">
+                        <h3>Chat Rooms</h3>
+                        <button id="create-room-btn">+</button>
+                    </div>
+                    <ul id="rooms-list"></ul>
+                </aside>
+
+                <!-- Chat area -->
+                <main class="chat-area">
+                    <div class="chat-header-info">
+                        <h3 id="current-room-name">Select a room</h3>
+                    </div>
+                    <div id="messages-container" class="messages-container">
+                        <div id="messages-list"></div>
+                    </div>
+                    <div class="message-input-container">
+                        <input type="text" id="message-input" placeholder="Type a message..." disabled>
+                        <input type="file" id="file-input" style="display: none;" multiple>
+                        <button id="file-btn" disabled>📎</button>
+                        <button id="send-btn" disabled>Send</button>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <!-- Create Room Modal -->
+        <div id="create-room-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h2>Create New Room</h2>
+                <form id="create-room-form">
+                    <div class="form-group">
+                        <label for="room-name">Room Name:</label>
+                        <input type="text" id="room-name" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="room-description">Description (optional):</label>
+                        <textarea id="room-description" name="description"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" id="cancel-room-btn">Cancel</button>
+                        <button type="submit">Create Room</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

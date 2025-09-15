@@ -1,10 +1,11 @@
 use axum::{
     extract::ws::{WebSocketUpgrade},
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Path, Query, State, Request},
+    http::{StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
+    middleware::{self, Next},
 };
 use axum_extra::extract::Multipart;
 use serde::{Deserialize, Serialize};
@@ -85,9 +86,37 @@ fn create_router(state: SharedState) -> Router {
         .nest_service("/static", ServeDir::new("frontend/static"))
         .layer(
             ServiceBuilder::new()
+                .layer(middleware::from_fn(auth_middleware))
                 .layer(CorsLayer::permissive())
         )
         .with_state(state)
+}
+
+// Auth middleware to extract user from JWT
+async fn auth_middleware(
+    mut req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let path = req.uri().path();
+    
+    // Skip auth for public endpoints
+    if path == "/" || path.starts_with("/static") || path.starts_with("/api/auth") {
+        return Ok(next.run(req).await);
+    }
+    
+    // Extract token from Authorization header
+    if let Some(auth_header) = req.headers().get(header::AUTHORIZATION) {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                if let Ok(claims) = verify_token(token) {
+                    req.extensions_mut().insert(claims);
+                    return Ok(next.run(req).await);
+                }
+            }
+        }
+    }
+    
+    Err(StatusCode::UNAUTHORIZED)
 }
 
 async fn serve_frontend() -> Html<&'static str> {
@@ -191,11 +220,12 @@ struct SendMessageRequest {
 
 async fn send_message_handler(
     State(state): State<SharedState>,
+    axum::Extension(claims): axum::Extension<AuthClaims>,
     Path(room_id): Path<Uuid>,
     Json(req): Json<SendMessageRequest>,
 ) -> Result<Json<Message>, AppError> {
-    // For now, use a dummy user ID - in production this would come from JWT
-    let user_id = Uuid::new_v4();
+    let user_id = claims.sub.parse::<Uuid>()
+        .map_err(|_| AppError::Auth("Invalid user ID in token".to_string()))?;
     
     let message = send_message(
         &state.db,
@@ -216,6 +246,7 @@ async fn send_message_handler(
 
 async fn upload_file(
     State(_state): State<SharedState>,
+    axum::Extension(_claims): axum::Extension<AuthClaims>,
     mut multipart: Multipart,
 ) -> Result<Json<UploadResponse>, AppError> {
     while let Some(field) = multipart.next_field().await.map_err(|_| AppError::BadRequest("Invalid multipart data".to_string()))? {

@@ -1,10 +1,10 @@
 # Build stage
-FROM rust:1.70 as builder
+FROM rust:1.80 as builder
 
 WORKDIR /app
 
 # Copy workspace files
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 COPY backend/ ./backend/
 
 # Build the application

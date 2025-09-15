@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 const JWT_SECRET: &str = "your-secret-key"; // In production, use environment variable
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthClaims {
     pub sub: String, // user id
     pub username: String,

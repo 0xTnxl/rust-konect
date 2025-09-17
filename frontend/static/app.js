@@ -216,32 +216,37 @@ class ChatApp {
         }
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/${roomId}`;
+        // Add the JWT token as a query parameter
+        const wsUrl = `${protocol}//${window.location.host}/ws/${roomId}?token=${encodeURIComponent(this.token)}`;
+        
+        console.log('Connecting to WebSocket:', wsUrl);
         
         this.websocket = new WebSocket(wsUrl);
         
         this.websocket.onopen = () => {
-            console.log('WebSocket connected');
-            this.sendWebSocketMessage('join_room', { room_id: roomId });
+            console.log('✅ WebSocket connected successfully');
         };
         
         this.websocket.onmessage = (event) => {
+            console.log('📨 Received WebSocket message:', event.data);
             try {
                 const message = JSON.parse(event.data);
+                console.log('📨 Parsed message:', message);
                 this.displayMessage(message);
             } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
+                console.error('❌ Failed to parse WebSocket message:', error);
             }
         };
         
-        this.websocket.onclose = () => {
-            console.log('WebSocket disconnected');
+        this.websocket.onclose = (event) => {
+            console.log('❌ WebSocket disconnected:', event.code, event.reason);
         };
         
         this.websocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
+            console.error('❌ WebSocket error:', error);
         };
     }
+
     
     sendWebSocketMessage(type, data) {
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {

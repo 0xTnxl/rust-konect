@@ -1,7 +1,9 @@
-use crate::{error::AppError, models::*};
+#[allow(dead_code)]
+
+use crate::error::AppError;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 // Basic XMPP bridge structure for future implementation
@@ -26,7 +28,7 @@ impl XmppBridge {
     pub async fn connect_to_xmpp_room(
         &self,
         jid: &str,
-        password: &str,
+        _password: &str,
         room_jid: &str,
         local_room_id: Uuid,
     ) -> Result<(), AppError> {

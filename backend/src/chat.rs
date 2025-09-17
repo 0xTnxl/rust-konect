@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+
 use crate::{error::AppError, models::*};
 use chrono::Utc;
 use sqlx::PgPool;

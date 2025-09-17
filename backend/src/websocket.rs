@@ -22,7 +22,7 @@ pub async fn handle_socket(socket: WebSocket, room_id: Uuid, state: SharedState)
     };
 
     // Spawn task to handle incoming WebSocket messages
-    let state_clone = Arc::clone(&state);
+    let _state_clone = Arc::clone(&state);
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
             if sender.send(Message::Text(msg)).await.is_err() {

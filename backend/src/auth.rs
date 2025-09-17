@@ -122,3 +122,4 @@ pub fn verify_token(token: &str) -> Result<AuthClaims, AppError> {
 
     Ok(token_data.claims)
 }
+

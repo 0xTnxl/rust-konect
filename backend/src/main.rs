@@ -1,14 +1,14 @@
 use axum::{
-    extract::ws::{WebSocketUpgrade},
+    extract::ws::WebSocketUpgrade,
     extract::{Path, Query, State, Request},
     http::{StatusCode, header},
-    response::{Html, IntoResponse, Response},
+    response::{Html, Response},
     routing::{get, post},
-    Json, Router,
+    Json, Router, Extension,
     middleware::{self, Next},
 };
 use axum_extra::extract::Multipart;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
@@ -19,7 +19,7 @@ use tokio::sync::{broadcast, RwLock};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 mod auth;
@@ -75,18 +75,22 @@ async fn main() -> anyhow::Result<()> {
 fn create_router(state: SharedState) -> Router {
     Router::new()
         .route("/", get(serve_frontend))
-        .route("/api/auth/register", post(register))
-        .route("/api/auth/login", post(login))
-        .route("/api/rooms", get(get_rooms_handler))
-        .route("/api/rooms", post(create_room_handler))
-        .route("/api/rooms/:room_id/messages", get(get_messages_handler))
-        .route("/api/rooms/:room_id/messages", post(send_message_handler))
-        .route("/api/upload", post(upload_file))
         .route("/ws/:room_id", get(websocket_handler))
         .nest_service("/static", ServeDir::new("frontend/static"))
+        .route("/api/auth/register", post(register))
+        .route("/api/auth/login", post(login))
+        .nest(
+            "/api",
+            Router::new()
+                .route("/rooms", get(get_rooms_handler))
+                .route("/rooms", post(create_room_handler))
+                .route("/rooms/:room_id/messages", get(get_messages_handler))
+                .route("/rooms/:room_id/messages", post(send_message_handler))
+                .route("/upload", post(upload_file))
+                .layer(middleware::from_fn(auth_middleware))
+        )
         .layer(
             ServiceBuilder::new()
-                .layer(middleware::from_fn(auth_middleware))
                 .layer(CorsLayer::permissive())
         )
         .with_state(state)
@@ -99,8 +103,11 @@ async fn auth_middleware(
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path();
     
-    // Skip auth for public endpoints
-    if path == "/" || path.starts_with("/static") || path.starts_with("/api/auth") {
+    // Skip auth for public endpoints AND WebSocket routes
+    if path == "/" 
+        || path.starts_with("/static") 
+        || path.starts_with("/api/auth")
+        || path.starts_with("/ws/") {
         return Ok(next.run(req).await);
     }
     
@@ -168,6 +175,7 @@ async fn login(
 
 async fn get_rooms_handler(
     State(state): State<SharedState>,
+    Extension(claims): Extension<AuthClaims>,
 ) -> Result<Json<Vec<Room>>, AppError> {
     let rooms = get_rooms(&state.db).await?;
     Ok(Json(rooms))
@@ -181,14 +189,10 @@ struct CreateRoomRequest {
 
 async fn create_room_handler(
     State(state): State<SharedState>,
+    Extension(claims): Extension<AuthClaims>,
     Json(req): Json<CreateRoomRequest>,
 ) -> Result<Json<Room>, AppError> {
     let room = create_room(&state.db, &req.name, req.description.as_deref()).await?;
-    
-    // Create broadcast channel for the new room
-    let (tx, _) = broadcast::channel(1000);
-    state.rooms.write().await.insert(room.id, tx);
-    
     Ok(Json(room))
 }
 
@@ -199,9 +203,10 @@ struct MessagesQuery {
 }
 
 async fn get_messages_handler(
-    State(state): State<SharedState>,
     Path(room_id): Path<Uuid>,
     Query(query): Query<MessagesQuery>,
+    State(state): State<SharedState>,
+    Extension(claims): Extension<AuthClaims>,
 ) -> Result<Json<Vec<Message>>, AppError> {
     let messages = get_messages(
         &state.db,
@@ -218,24 +223,22 @@ struct SendMessageRequest {
     message_type: Option<String>,
 }
 
+// Update your message handlers to use this
 async fn send_message_handler(
-    State(state): State<SharedState>,
-    axum::Extension(claims): axum::Extension<AuthClaims>,
     Path(room_id): Path<Uuid>,
-    Json(req): Json<SendMessageRequest>,
+    State(state): State<SharedState>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req_data): Json<SendMessageRequest>,
 ) -> Result<Json<Message>, AppError> {
-    let user_id = claims.sub.parse::<Uuid>()
-        .map_err(|_| AppError::Auth("Invalid user ID in token".to_string()))?;
-    
     let message = send_message(
         &state.db,
         room_id,
-        user_id,
-        &req.content,
-        req.message_type.as_deref().unwrap_or("text"),
+        Uuid::parse_str(&claims.sub).map_err(|_| AppError::Auth("Invalid user ID".to_string()))?,
+        &req_data.content,
+        &req_data.message_type.unwrap_or_else(|| "text".to_string()),
     ).await?;
     
-    // Broadcast message to WebSocket clients
+    // Broadcast to WebSocket clients
     if let Some(tx) = state.rooms.read().await.get(&room_id) {
         let message_json = serde_json::to_string(&message).unwrap();
         let _ = tx.send(message_json);
@@ -277,10 +280,31 @@ async fn upload_file(
     Err(AppError::BadRequest("No file provided".to_string()))
 }
 
+// Add the missing websocket_handler function
 async fn websocket_handler(
     ws: WebSocketUpgrade,
     Path(room_id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
     State(state): State<SharedState>,
 ) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, room_id, state))
+    // Validate token from query parameter
+    if let Some(token) = params.get("token") {
+        if let Ok(_claims) = verify_token(token) {
+            return ws.on_upgrade(move |socket| handle_socket(socket, room_id, state));
+        }
+    }
+    
+    // If no valid token, return unauthorized
+    Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .body("Unauthorized".into())
+        .unwrap()
+}
+
+// Helper function to extract AuthClaims from request
+fn extract_auth_claims(req: &Request) -> Result<AuthClaims, StatusCode> {
+    req.extensions()
+        .get::<AuthClaims>()
+        .cloned()
+        .ok_or(StatusCode::UNAUTHORIZED)
 }
